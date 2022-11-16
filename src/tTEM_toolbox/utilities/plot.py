@@ -67,9 +67,7 @@ def generate_trace(data, *args):
         layout = dict(scene=dict(xaxis=dict(title='UTMX'),
                                  yaxis=dict(title='UTMY'),
                                  zaxis=dict(title='Elevation (m)'),
-                                 aspectmode='data'),
-
-                                    )
+                                 aspectmode='auto'),)
         trace = dict(data=[ttemfigdata], layout=layout)
         return trace
     elif np.isin("well", args):

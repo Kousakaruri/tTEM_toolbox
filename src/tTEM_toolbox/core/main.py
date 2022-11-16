@@ -3,8 +3,8 @@ import sys
 import numpy as np
 import pandas as pd
 import xarray as xr
-from tTEM_tool import core as tc
-from tTEM_tool import utilities as tu
+from tTEM_toolbox import core as tc
+from tTEM_toolbox import utilities as tu
 import plotly.graph_objects as go
 import plotly.io as pio
 from functools import partial

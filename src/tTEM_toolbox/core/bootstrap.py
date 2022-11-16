@@ -2,7 +2,7 @@ from numba import jit
 import numpy as np
 import pandas as pd
 import sys
-import tTEM_tool as tt
+import tTEM_toolbox as tt
 from progress.bar import Bar
 from scipy.stats import pearsonr
 
