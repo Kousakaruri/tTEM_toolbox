@@ -128,7 +128,6 @@ class ProcessTTEM:
                 new_group = group[group['Elevation_Cell'] >= elevation]
                 ttem_concatlist.append(new_group)
         df_out = pd.concat(ttem_concatlist)
-        df_out["Elevation_End"] = df_out["Elevation_Cell"].subtract(df_out["Thickness"]) #create new column for future usage
         return df_out
 
     @staticmethod
@@ -231,6 +230,7 @@ class ProcessTTEM:
     # Sort the dataframe
         tmp_df = tmp_df.sort_values(by=['ID', 'Line_No','Layer_No'])
         tmp_df.reset_index(drop=True, inplace=True)
+        tmp_df["Elevation_End"] = tmp_df["Elevation_Cell"].subtract(tmp_df["Thickness"])
         self.ttem_data = tmp_df.copy()
         return self.ttem_data
 
