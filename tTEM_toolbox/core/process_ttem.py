@@ -239,6 +239,6 @@ if __name__ == "__main__":
     print('This is a module, please import it to use it.')
     import tTEM_toolbox
     from pathlib import Path
-    workdir = Path(r'C:\Users\jldz9\OneDrive - University of Missouri\MST\Code\Python\tTEM_test')
-    ttem_lslake = workdir.joinpath(r'Plot_with_well_log\lsll_I05_MOD.xyz')
+    workdir = Path.cwd()
+    ttem_lslake = workdir.parent.parent.joinpath(r'data\PD22_I03_MOD.xyz')
     ttem_lsl = tTEM_toolbox.ProcessTTEM(ttem_lslake)
