@@ -3,15 +3,8 @@
 #surface plot time series
 import os
 import numpy as np
-import tTEM_tool as tt
-import plotly.express as px
 import plotly.graph_objects as go
-import glob
-import re
-import xarray as xr
 import pandas as pd
-from itertools import compress
-from pyproj import Transformer
 import sys
 #####Plot water elevation time series
 
@@ -73,7 +66,7 @@ def water_head_format(ds,time='2020-3',header='lev_va'):
 def plot_water_elevation():
     time = np.datetime_as_string(np.arange(np.datetime64('2013-03'), np.datetime64('2022-03'),np.timedelta64(1,'Y')))
     time = [str(x) for x in time]
-    water = tt.main.GWSurface(waterwell=well_info, elevation_type='depth', time=time)
+    water = core.main.GWSurface(waterwell=well_info, elevation_type='depth', time=time)
     result = water.format()
     elevation = r'C:\Users\jldz9\OneDrive - University of Missouri\MST\Code\Python\tTEM_test\well_Utah\usgs_water_elevation.csv'
     ele = pd.read_csv(elevation)
@@ -121,7 +114,7 @@ def select_closest_NEW(ttemdata, welllog, distance=500):
     concatlist = []
     concatwell = []
     count = 0
-    ori_well = tt.process_well.format_well(welllog, upscale=False)
+    ori_well = core.process_well.format_well(welllog, upscale=False)
     groups_well = ori_well.groupby('Bore')
     total = len(list(groups_well.groups.keys()))
     ttem_location = list(ttemdata.groupby(['UTMX', 'UTMY']).groups.keys())
@@ -172,32 +165,10 @@ if __name__=="__main__":
     ttemname = r'C:\Users\jldz9\OneDrive - University of Missouri\MST\Code\Python\tTEM_test\Plot_with_well_log\PD1_I01_MOD.xyz'
     ttemname2 = r'C:\Users\jldz9\OneDrive - University of Missouri\MST\Code\Python\tTEM_test\Plot_with_well_log\PD22_I03_MOD.xyz'
     DOI = r'C:\Users\jldz9\OneDrive - University of Missouri\MST\Code\Python\tTEM_test\Plot_with_well_log\DOID1_DOIStaE.xyz'
-    ttem = tt.main.ProcessTTEM(ttemname=[ttemname, ttemname2],
-                               welllog=welllog,
-                               DOI=DOI,
-                               layer_exclude=[1, 2, 3, 4])
+    ttem = core.main.ProcessTTEM(ttemname=[ttemname, ttemname2],
+                                 welllog=welllog,
+                                 DOI=DOI,
+                                 layer_exclude=[1, 2, 3, 4])
     data = ttem.data()
     # fig.add_trace(tt.plot.generate_trace(data, 'ttem'))
-    result = upscale(data, factor=100)
-    matched_ttem, matched_well = select_closest_NEW(result, welllog)
-    welllogdf = ttem_well_lithology(matched_ttem, matched_well)
-    welllogdf = welllogdf[welllogdf['Resistivity'].notna()]
-    mean_r = welllogdf.groupby(['Bore', 'Keyword'])['Resistivity'].mean()
-    mean_r = mean_r.to_frame().reset_index()
-    fig = px.histogram(mean_r, x='Bore', y='Resistivity', color='Keyword', barmode='group', color_discrete_map={
-        "fine grain": "blue",
-        "mix grain": "yellow",
-        "coarse grain": "red"
-    })
-    well_group = welllogdf.groupby('Bore')
-    for name, group in well_group:
-        elevation = group['Elevation1'] - group['Elevation2']
-        figwell = px.bar(group, x='Resistivity', y='Elevation1', color='Keyword', text='Keyword',
-               orientation='h', title=name,
-               color_discrete_map={
-                   "fine grain": "blue",
-                   "mix grain": "yellow",
-                   "coarse grain": "red"
-               })
-        #figwell.update_traces(width=5)
-        figwell.write_html(r'C:\Users\jldz9\OneDrive - University of Missouri\MST\2022\Paper\wells'+name+'.html')
+    #
