@@ -3,6 +3,7 @@
 # Version 11.18.2023
 # Author: Jiawei Li
 import os
+import pathlib
 import re
 import requests
 import numpy as np
@@ -14,6 +15,170 @@ import datetime
 from itertools import compress
 from progress.bar import Bar
 from pathlib import Path
+from tTEM_toolbox.defaults import constants
+from tTEM_toolbox.utils import utils
+from collections import namedtuple
+class ProcessWell:
+    """
+    This class is use to process and format lithology well logs (from excel or csv) and water level data (from USGS).\
+    The lithology well log format should be as exact the same as the example file under data folder. \
+    All data were assume under metric unit (m).
+    """
+    def __init__(self,
+                 fname: (str, pathlib.PurePath, list, pd.DataFrame),
+                 ):
+        if isinstance(fname, (str, pathlib.PurePath)):
+            self.fname = [fname]
+        elif isinstance(fname, pd.DataFrame):
+            self.well_log = fname
+            print('Will reuse cached well log in memory')
+    @staticmethod
+    def _find_all_readable(path:pathlib.PurePath)->list:
+        """
+        This will receive a single path-like input and try to filter all readable file paths for well logs uses.
+        :param path: path-like pathlib.PurePath object or string
+        :return: list of pathlib.PurePath objects
+        """
+        readable_ext = constants.CSV_EXTENSION + constants.EXCEL_EXTENSION
+        if not isinstance(path, (str, pathlib.PurePath)):
+            raise TypeError('Input path must be a string or pathlib.PurePath object')
+
+        if Path(path).is_dir():
+            file_list = [f for f in Path(path).iterdir() if f.suffix in readable_ext]
+            if len(file_list) == 0:
+                raise ValueError('No {} file found in {}'.format(readable_ext, path))
+            return file_list
+        elif Path(path).is_file():
+            if Path(path).suffix in readable_ext:
+                file_list = [path]
+            else:
+                raise ValueError('Input file does not have extension of {}'.format(readable_ext))
+            return file_list
+    @staticmethod
+
+    @staticmethod
+    def _format_input(fname:(str, pathlib.PurePath, list, pd.DataFrame)) -> list:
+        """
+        This will format input file path(s) to a list of pandas dataframe (read from csv) and/or dict that includes all sheets in the excel\
+         file, each sheet were pandas dataframe. If input is a pandas dataframe, it will return the input dataframe in a list.
+        :param fname: one or a list of string, pathlib.PurePath object, pandas dataframe
+        :return: a list of pandas dataframe and/or dict
+        """
+        if isinstance(fname, (str, pathlib.PurePath)):
+            fname = [fname]
+        elif isinstance(fname, pd.DataFrame):
+            print('Will reuse cached Dataframe')
+            return [fname]
+        elif [isinstance(i, pd.DataFrame) for i in fname]:
+            print('Input as alist of dataframe, will reuse cached Dataframe')
+            return fname
+        else:
+            raise TypeError('Input must be one or a list of string, pathlib.PurePath object, pandas dataframe')
+        export_list = []
+        for path in fname:
+            file_list = ProcessWell._find_all_readable(path)
+            excels = [file for file in file_list if file.suffix in constants.EXCEL_EXTENSION]
+            csvs = [file for file in file_list if file.suffix in constants.CSV_EXTENSION]
+            read_excels = [pd.read_excel(file, sheet_name=None) for file in excels]
+            read_csvs = [pd.read_csv(file) for file in csvs]
+            combined = read_excels + read_csvs
+            export_list.append(combined)
+        result = [item for sublist in export_list for item in sublist]
+        return result
+    @staticmethod
+    def _read_lithology(fname: (str, pathlib.PurePath, list, pd.DataFrame)):
+        """
+        Try to read lithology sheet from Excel file with tab name similar to 'Lithology', or csv file contains lithology data.
+        :param fname: one or a list of string, pathlib.PurePath object, pandas dataframe
+        :return:
+        """
+        result = ProcessWell._format_input(fname)
+        lithology_list = []
+        for single_file in result:
+            if isinstance(single_file, dict):  # which means it is an Excel file
+                match_sheet_name = utils.compatibility_search(single_file, constants.LITHOLOGY_SHEET_NAMES)
+                if len(match_sheet_name) == 0:
+                    continue
+                lithology_sheet = single_file[match_sheet_name[0]]
+                lithology_list.append(lithology_sheet)
+            if isinstance(single_file, pd.DataFrame):  # which means it is a csv file
+                match_column_lithology = utils.compatibility_search(single_file, constants.LITHOLOGY_COLUMN_NAMES_KEYWORD)
+                if match_column_lithology > 0:
+                    lithology_sheet = single_file
+                    lithology_list.append(lithology_sheet)
+        concat_list = []
+        for sheet in lithology_list:
+            match_column_lithology = utils.compatibility_search(sheet,
+                                                                constants.LITHOLOGY_COLUMN_NAMES_KEYWORD)
+            match_column_bore = utils.compatibility_search(sheet, constants.LITHOLOGY_COLUMN_NAMES_BORE)
+            match_column_depth_top = utils.compatibility_search(sheet,
+                                                                constants.LITHOLOGY_COLUMN_NAMES_DEPTH_TOP)
+            match_column_depth_bottom = utils.compatibility_search(sheet,
+                                                                   constants.LITHOLOGY_COLUMN_NAMES_DEPTH_BOTTOM)
+            lithology = pd.DataFrame(sheet[match_column_lithology[0]])
+            lithology.columns = ['Keyword']
+            lithology['Bore'] = sheet[match_column_bore[0]]
+            lithology['Depth_top'] = sheet[match_column_depth_top[0]]
+            lithology['Depth_bottom'] = sheet[match_column_depth_bottom[0]]
+            lithology['Thickness'] = lithology['Depth_bottom'].subtract(lithology['Depth_top'])
+            concat_list.append(lithology)
+        result = pd.concat(concat_list)
+        result = result[['Bore', 'Depth_top', 'Depth_bottom', 'Thickness', 'Keyword']]
+        return result
+
+    @staticmethod
+    def _read_location(fname: (str, pathlib.PurePath)):
+        """
+        Similiar to _read_lithology, but read location sheet from Excel file with tab name similar to 'Location', \
+        or csv file contains location data.
+        :param fname: fname: one or a list of string, pathlib.PurePath object, pandas dataframe
+        :return:
+        """
+        result = ProcessWell._format_input(fname)
+        location_list = []
+        for single_file in result:
+            if isinstance(single_file, dict):
+                match_sheet_name = utils.compatibility_search(single_file, constants.LOCATION_SHEET_NAMES)
+                if len(match_sheet_name) == 0:
+                    continue
+                location_sheet = single_file[match_sheet_name[0]]
+                location_list.append(location_sheet)
+            if isinstance(single_file, pd.DataFrame):
+                match_column_location = utils.compatibility_search(single_file, constants.LOCATION_COLUMN_NAMES_LON)
+                if match_column_location > 0:
+                    location_sheet = single_file
+                    location_list.append(location_sheet)
+        concat_list = []
+        for sheet in location_list:
+            match_column_lat = utils.compatibility_search(sheet, constants.LOCATION_COLUMN_NAMES_LAT)
+            match_column_lon = utils.compatibility_search(sheet, constants.LOCATION_COLUMN_NAMES_LON)
+            location = pd.DataFrame(sheet[match_column_lat[0]])
+            location.columns = ['Latitude']
+            location['Longitude'] = sheet[match_column_lon[0]]
+            location['Bore'] = sheet['Bore']
+            concat_list.append(location)
+        result = pd.concat(concat_list)
+        return result
+
+    @staticmethod
+    def _coord_transform(lat: (float, list),
+                         long: (float, list),
+                         crs_from: str,
+                         crs_to: str):
+        transformer = Transformer.from_crs(crs_from, crs_to)
+        x, y = transformer.transform(lat, long)
+        return x, y
+
+
+    def format_well(self):
+        if isinstance(self.fname, pd.DataFrame):
+            print('Will reuse cached well log in memory')
+            return self.well_log
+        elif isinstance(self.fname, list):
+            welllogconcat = []
+            for i in self.fname:
+                lithology = self._read_lithology(i)
+                location = self._read_location(i)
 
 
 
@@ -192,6 +357,8 @@ def water_head_format(ds,time='2020-3',header='lev_va',elevation=None):
     return df
 
 
-
-
+if __name__ == "__main__":
+    print('This is a module, please import it to use it.')
+    a = ProcessWell._read_lithology(r'C:\Users\jldz9\PycharmProjects\tTEM_toolbox\data')
+    b = ProcessWell._read_location(r'C:\Users\jldz9\PycharmProjects\tTEM_toolbox\data')
 
