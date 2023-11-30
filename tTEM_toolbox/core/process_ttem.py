@@ -6,7 +6,6 @@ import pathlib
 import re
 import pandas as pd
 import numpy as np
-from typing import Union
 from tTEM_toolbox.defaults.constants import XYZ_FILE_PATTERN, DOI_FILE_PATTERN
 
 
@@ -28,8 +27,8 @@ class ProcessTTEM:
     :return: A pandas dataframe that contains the filtered/processed tTEM data
     """
     def __init__(self,
-                 fname: Union[pathlib.PurePath, str, pd.DataFrame,list],
-                 doi_path: Union[pathlib.PurePath, str, list] = False,
+                 fname: (pathlib.PurePath, str, pd.DataFrame,list),
+                 doi_path: (pathlib.PurePath, str, list) = False,
                  layer_exclude: list = False,
                  line_exclude: list = False,
                  point_exclude: list = False,
@@ -48,7 +47,7 @@ class ProcessTTEM:
 
 
     @staticmethod
-    def _read_ttem(fname: Union[pathlib.PurePath, str]) -> Union[pd.DataFrame, dict]:
+    def _read_ttem(fname: (pathlib.PurePath, str)) -> (pd.DataFrame, dict):
         """
         This function read tTEM data from .xyz file, and return a formatted dataframe that contains all the tTEM data. \n
         Version 11.18.2023 \n
@@ -87,7 +86,7 @@ class ProcessTTEM:
 
     @staticmethod
     def _DOI(dataframe: pd.DataFrame,
-             doi_path: Union[pathlib.PurePath, str, list]) -> pd.DataFrame:
+             doi_path: (pathlib.PurePath, str, list)) -> pd.DataFrame:
         """
         Remove all tTEM data under DOI elevation limit with provided DOI file from Aarhus Workbench \n
         Version 11.18.2023 \n
@@ -190,7 +189,7 @@ class ProcessTTEM:
         result = pd.concat(concatlist)
         result.reset_index(drop=True, inplace=True)
         return result
-    def data(self):
+    def data(self) -> pd.DataFrame:
         return self.ttem_data
     def format_ttem(self):
         """
