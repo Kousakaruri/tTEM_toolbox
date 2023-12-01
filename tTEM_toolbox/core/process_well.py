@@ -75,7 +75,6 @@ class ProcessWell:
             else:
                 raise ValueError('Input file does not have extension of {}'.format(readable_ext))
             return file_list
-    @staticmethod
 
     @staticmethod
     def _format_input(fname:(str, pathlib.PurePath, list, pd.DataFrame)) -> list:
