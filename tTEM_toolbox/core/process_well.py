@@ -21,17 +21,38 @@ from collections import namedtuple
 class ProcessWell:
     """
     This class is use to process and format lithology well logs (from excel or csv) and water level data (from USGS).\
-    The lithology well log format should be as exact the same as the example file under data folder. \
-    All data were assume under metric unit (m).
+    All data were assume under metric unit (m). \n
+    :param lithologyfname: one or a list of string, pathlib.PurePath object, pandas dataframe. The input files(s) \
+            shall be either csv or excel file(s) that contains lithology and location data. sheet name and column name \
+            needs to be clearly marked as Lithology, Location, Latitude, Longitude, Depth_top, Depth_bottom or anything\
+            similiar, keyword(s) can be modified under tTEM_toolbox/defaults/constants.py.\
     """
     def __init__(self,
-                 fname: (str, pathlib.PurePath, list, pd.DataFrame),
-                 ):
-        if isinstance(fname, (str, pathlib.PurePath)):
-            self.fname = [fname]
-        elif isinstance(fname, pd.DataFrame):
-            self.well_log = fname
+                 lithologyfname: (str, pathlib.PurePath, list, pd.DataFrame),
+                 crs_from: str = 'epsg:4326',
+                 crs_to: str = 'epsg:32612'):
+        if len(lithologyfname) == 0:
+            raise ValueError('Input file path is empty')
+        if isinstance(lithologyfname, (str, pathlib.PurePath)):
+            self.fname = [lithologyfname]
+            print('reading lithology from {}'.format(Path(lithologyfname).name))
+        elif isinstance(lithologyfname, pd.DataFrame):
+            self.well_log = lithologyfname
             print('Will reuse cached well log in memory')
+        elif isinstance(lithologyfname, list):
+            if all([isinstance(i, pd.DataFrame) for i in lithologyfname]):
+                self.well_log = lithologyfname
+                print('Input as a list of dataframe, will reuse cached Dataframe')
+            if all([isinstance(i, (str, pathlib.PurePath)) for i in lithologyfname]):
+                self.fname = lithologyfname
+            print('reading lithology from {}'.format([Path(i).name for i in lithologyfname]))
+        self.crs_from = crs_from
+        self.crs_to = crs_to
+        self.well_log = self.format_well()
+        self.data()
+
+
+
     @staticmethod
     def _find_all_readable(path:pathlib.PurePath)->list:
         """
@@ -66,10 +87,12 @@ class ProcessWell:
         """
         if isinstance(fname, (str, pathlib.PurePath)):
             fname = [fname]
+        elif isinstance(fname, list):
+            pass
         elif isinstance(fname, pd.DataFrame):
             print('Will reuse cached Dataframe')
             return [fname]
-        elif [isinstance(i, pd.DataFrame) for i in fname]:
+        elif all([isinstance(i, pd.DataFrame) for i in fname]):
             print('Input as alist of dataframe, will reuse cached Dataframe')
             return fname
         else:
@@ -77,8 +100,8 @@ class ProcessWell:
         export_list = []
         for path in fname:
             file_list = ProcessWell._find_all_readable(path)
-            excels = [file for file in file_list if file.suffix in constants.EXCEL_EXTENSION]
-            csvs = [file for file in file_list if file.suffix in constants.CSV_EXTENSION]
+            excels = [file for file in file_list if Path(file).suffix in constants.EXCEL_EXTENSION]
+            csvs = [file for file in file_list if Path(file).suffix in constants.CSV_EXTENSION]
             read_excels = [pd.read_excel(file, sheet_name=None) for file in excels]
             read_csvs = [pd.read_csv(file) for file in csvs]
             combined = read_excels + read_csvs
@@ -115,19 +138,21 @@ class ProcessWell:
                                                                 constants.LITHOLOGY_COLUMN_NAMES_DEPTH_TOP)
             match_column_depth_bottom = utils.compatibility_search(sheet,
                                                                    constants.LITHOLOGY_COLUMN_NAMES_DEPTH_BOTTOM)
+
             lithology = pd.DataFrame(sheet[match_column_lithology[0]])
             lithology.columns = ['Keyword']
             lithology['Bore'] = sheet[match_column_bore[0]]
             lithology['Depth_top'] = sheet[match_column_depth_top[0]]
             lithology['Depth_bottom'] = sheet[match_column_depth_bottom[0]]
             lithology['Thickness'] = lithology['Depth_bottom'].subtract(lithology['Depth_top'])
+
             concat_list.append(lithology)
         result = pd.concat(concat_list)
         result = result[['Bore', 'Depth_top', 'Depth_bottom', 'Thickness', 'Keyword']]
         return result
 
     @staticmethod
-    def _read_location(fname: (str, pathlib.PurePath)):
+    def _read_spatial(fname: (str, pathlib.PurePath)):
         """
         Similiar to _read_lithology, but read location sheet from Excel file with tab name similar to 'Location', \
         or csv file contains location data.
@@ -152,10 +177,13 @@ class ProcessWell:
         for sheet in location_list:
             match_column_lat = utils.compatibility_search(sheet, constants.LOCATION_COLUMN_NAMES_LAT)
             match_column_lon = utils.compatibility_search(sheet, constants.LOCATION_COLUMN_NAMES_LON)
+            match_column_elevation = utils.compatibility_search(sheet,
+                                                                constants.LOCATION_COLUMN_NAMES_ELEVATION)
             location = pd.DataFrame(sheet[match_column_lat[0]])
             location.columns = ['Latitude']
             location['Longitude'] = sheet[match_column_lon[0]]
             location['Bore'] = sheet['Bore']
+            location['Elevation'] = sheet[match_column_elevation[0]]
             concat_list.append(location)
         result = pd.concat(concat_list)
         return result
@@ -163,26 +191,64 @@ class ProcessWell:
     @staticmethod
     def _coord_transform(lat: (float, list),
                          long: (float, list),
-                         crs_from: str,
-                         crs_to: str):
+                         crs_from: str = 'espg:4326',
+                         crs_to: str= 'espg:32612'):
+        """
+        Transform coordinate from one crs to another, the default coordinate is assume to be WGS84 (epsg:4326)
+        :param lat: The column name or point of latitude , usually 'Latitude', 'lat', 'LAT', 'Y', 'y'
+        :param long: The column name or point of longitude, usually 'Longitude', 'lon', 'LON', 'X', 'x'
+        :param crs_from: The crs of the input coordinate, e.g. 'epsg:4326'
+        :param crs_to: The crs of the output coordinate, e.g. 'epsg:32612'
+        :return:
+        """
         transformer = Transformer.from_crs(crs_from, crs_to)
         x, y = transformer.transform(lat, long)
         return x, y
 
+    @staticmethod
+    def _lithology_location_connect(lithology: pd.DataFrame,
+                                   location: pd.DataFrame) -> pd.DataFrame:
+        """
+        Connect lithology and location data by Borehole ID
+        :param lithology: lithology dataframe
+        :param location: location dataframe
+        :return: combined dataframe
+        """
+        lithology_group = lithology.groupby('Bore')
+        concatlist = []
+        for name, group in lithology_group:
+            group_location = location[location['Bore'] == name]
+            if group_location.empty:
+                continue
+            group['Latitude'] = group_location['Latitude'].iloc[0]
+            group['Longitude'] = group_location['Longitude'].iloc[0]
+            group['X'] = group_location['X'].iloc[0]
+            group['Y'] = group_location['Y'].iloc[0]
+            group['Z'] = group_location['Elevation'].iloc[0]
+            group['Elevation_top'] = group['Z'].subtract(group['Depth_top'])
+            group['Elevation_bottom'] = group['Z'].subtract(group['Depth_bottom'])
+            concatlist.append(group)
+        result = pd.concat(concatlist)
+        return result
 
     def format_well(self):
-        if isinstance(self.fname, pd.DataFrame):
-            print('Will reuse cached well log in memory')
-            return self.well_log
-        elif isinstance(self.fname, list):
-            welllogconcat = []
-            for i in self.fname:
-                lithology = self._read_lithology(i)
-                location = self._read_location(i)
+        lithology = self._read_lithology(self.fname)
+        location = self._read_spatial(self.fname)
+        location['X'], location['Y'] = self._coord_transform(location['Latitude'],
+                                                                   location['Longitude'],
+                                                                   self.crs_from,
+                                                                   self.crs_to)
+        self.well_log = self._lithology_location_connect(lithology, location)
+        return self.well_log
+
+    def data(self):
+        return self.well_log
 
 
 
-def format_well(welllog, upscale=1):
+
+
+def _format_well(welllog, upscale=1):
     if isinstance(welllog, pd.DataFrame):
         print('Will reuse cached well log in memory')
         return welllog
@@ -359,6 +425,5 @@ def water_head_format(ds,time='2020-3',header='lev_va',elevation=None):
 
 if __name__ == "__main__":
     print('This is a module, please import it to use it.')
-    a = ProcessWell._read_lithology(r'C:\Users\jldz9\PycharmProjects\tTEM_toolbox\data')
-    b = ProcessWell._read_location(r'C:\Users\jldz9\PycharmProjects\tTEM_toolbox\data')
+    a = ProcessWell([r'C:\Users\jldz9\PycharmProjects\tTEM_toolbox\data\Well_log.xlsx'])
 
