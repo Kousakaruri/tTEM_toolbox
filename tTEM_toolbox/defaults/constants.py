@@ -31,3 +31,11 @@ LOCATION_COLUMN_NAMES_LAT = ('LAT', 'lat', 'Lat',
 LOCATION_COLUMN_NAMES_LON = ('LON', 'lon', 'Lon',
                              'LONGITUDE', 'Longitude', 'longitude',
                              'X', 'x')
+LOCATION_COLUMN_NAMES_ELEVATION = ('Elevation', 'elevation', 'ELEVATION',
+                                   'Elev', 'elev', 'ELEV',
+                                   'Elevation_m', 'elevation_m', 'ELEVATION_M',
+                                   'Elev_m', 'elev_m', 'ELEV_M',
+                                   'Elevation(m)', 'elevation(m)', 'ELEVATION(M)',
+                                   'Elev(m)', 'elev(m)', 'ELEV(M)',
+                                   'Z', 'z')
+
